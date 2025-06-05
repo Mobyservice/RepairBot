@@ -1,12 +1,15 @@
 import sqlite3
+import os
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils import executor
 from aiogram.dispatcher import FSMContext
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.dispatcher import filters
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
-API_TOKEN = '7786941832:AAHt5glecJPOkvNveniTb-Y_cy885SZwX1o'  # Замените на токен вашего бота
+API_TOKEN = os.getenv("BOT_TOKEN")
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
@@ -97,9 +100,7 @@ async def step_master_name(message: types.Message, state: FSMContext):
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO repairs (status, repair_type, brand, model, repair_price, prepayment, balance_due, parts_cost, client_name, client_phone, master_name)
-
-Artur Karenovich, [05.06.2025 3:52]
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         data['status'], data['repair_type'], data['brand'], data['model'],
         data['repair_price'], data['prepayment'], balance_due, data['parts_cost'],
@@ -162,6 +163,6 @@ async def get_new_status(message: types.Message, state: FSMContext):
     await state.finish()
 
 # ---------- Запуск ----------
-if name == 'main':
+if __name__ == '__main__':
     from aiogram import executor
     executor.start_polling(dp, skip_updates=True)
