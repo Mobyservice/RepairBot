@@ -10,127 +10,158 @@ API_TOKEN = '7786941832:AAHt5glecJPOkvNveniTb-Y_cy885SZwX1o'  # Замените
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
+dp.middleware.setup(LoggingMiddleware())
 
 db_path = 'repairs.db'
 
+# ---------- FSM для добавления заказа ----------
 class OrderForm(StatesGroup):
-    client_name = State()
-    client_phone = State()
+    status = State()
+    repair_type = State()
     brand = State()
     model = State()
-    repair_type = State()
     repair_price = State()
     prepayment = State()
     parts_cost = State()
+    client_name = State()
+    client_phone = State()
     master_name = State()
 
-@dp.message_handler(commands='start')
+@dp.message_handler(commands=['start'])
 async def cmd_start(message: types.Message):
-    buttons = [[KeyboardButton("📋 Новый заказ")], [KeyboardButton("🔍 Статус заказа")]]
-    keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
-    await message.answer("Добро пожаловать. Выберите действие:", reply_markup=keyboard)
+    await message.answer("Введите статус (например: В работе, Готово, Ожидает запчасть):")
+    await OrderForm.status.set()
 
-@dp.message_handler(lambda msg: msg.text == "📋 Новый заказ")
-async def new_order(message: types.Message):
-    await message.answer("Введите имя клиента:")
-    await OrderForm.client_name.set()
-
-@dp.message_handler(state=OrderForm.client_name)
-async def process_name(message: types.Message, state: FSMContext):
-    await state.update_data(client_name=message.text)
-    await message.answer("Введите телефон клиента:")
+@dp.message_handler(state=OrderForm.status)
+async def step_status(message: types.Message, state: FSMContext):
+    await state.update_data(status=message.text)
+    await message.answer("Введите вид ремонта:")
     await OrderForm.next()
 
-@dp.message_handler(state=OrderForm.client_phone)
-async def process_phone(message: types.Message, state: FSMContext):
-    await state.update_data(client_phone=message.text)
-    await message.answer("Введите бренд устройства:")
+@dp.message_handler(state=OrderForm.repair_type)
+async def step_repair_type(message: types.Message, state: FSMContext):
+    await state.update_data(repair_type=message.text)
+    await message.answer("Введите производителя устройства:")
     await OrderForm.next()
 
 @dp.message_handler(state=OrderForm.brand)
-async def process_brand(message: types.Message, state: FSMContext):
+async def step_brand(message: types.Message, state: FSMContext):
     await state.update_data(brand=message.text)
     await message.answer("Введите модель устройства:")
     await OrderForm.next()
 
 @dp.message_handler(state=OrderForm.model)
-async def process_model(message: types.Message, state: FSMContext):
+async def step_model(message: types.Message, state: FSMContext):
     await state.update_data(model=message.text)
-    await message.answer("Введите вид ремонта:")
-    await OrderForm.next()
-
-@dp.message_handler(state=OrderForm.repair_type)
-async def process_type(message: types.Message, state: FSMContext):
-    await state.update_data(repair_type=message.text)
     await message.answer("Введите цену ремонта:")
     await OrderForm.next()
 
 @dp.message_handler(state=OrderForm.repair_price)
-async def process_price(message: types.Message, state: FSMContext):
+async def step_price(message: types.Message, state: FSMContext):
     await state.update_data(repair_price=float(message.text))
     await message.answer("Введите задаток:")
     await OrderForm.next()
 
 @dp.message_handler(state=OrderForm.prepayment)
-async def process_prepayment(message: types.Message, state: FSMContext):
+async def step_prepayment(message: types.Message, state: FSMContext):
     await state.update_data(prepayment=float(message.text))
     await message.answer("Введите стоимость запчастей:")
     await OrderForm.next()
 
 @dp.message_handler(state=OrderForm.parts_cost)
-async def process_parts(message: types.Message, state: FSMContext):
+async def step_parts_cost(message: types.Message, state: FSMContext):
     await state.update_data(parts_cost=float(message.text))
-    await message.answer("Введите ваше имя (мастер):")
+    await message.answer("Введите имя клиента:")
+    await OrderForm.next()
+
+@dp.message_handler(state=OrderForm.client_name)
+async def step_client_name(message: types.Message, state: FSMContext):
+    await state.update_data(client_name=message.text)
+    await message.answer("Введите номер телефона клиента:")
+    await OrderForm.next()
+
+@dp.message_handler(state=OrderForm.client_phone)
+async def step_client_phone(message: types.Message, state: FSMContext):
+    await state.update_data(client_phone=message.text)
+    await message.answer("Введите имя мастера:")
     await OrderForm.next()
 
 @dp.message_handler(state=OrderForm.master_name)
-async def process_master(message: types.Message, state: FSMContext):
+async def step_master_name(message: types.Message, state: FSMContext):
+    await state.update_data(master_name=message.text)
     data = await state.get_data()
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
 
     balance_due = data['repair_price'] - data['prepayment']
 
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO repairs (
-            status, repair_type, brand, model, repair_price, prepayment,
-            balance_due, parts_cost, client_name, client_phone, master_name
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO repairs (status, repair_type, brand, model, repair_price, prepayment, balance_due, parts_cost, client_name, client_phone, master_name)
+
+Artur Karenovich, [05.06.2025 3:52]
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        "В работе", data['repair_type'], data['brand'], data['model'],
+        data['status'], data['repair_type'], data['brand'], data['model'],
         data['repair_price'], data['prepayment'], balance_due, data['parts_cost'],
-        data['client_name'], data['client_phone'], message.text
+        data['client_name'], data['client_phone'], data['master_name']
     ))
     conn.commit()
     conn.close()
 
-    await message.answer("Заказ успешно добавлен!")
+    await message.answer("Заказ сохранён.")
     await state.finish()
 
-@dp.message_handler(lambda msg: msg.text == "🔍 Статус заказа")
-async def check_status(message: types.Message):
-    await message.answer("Введите номер телефона клиента:")
-
-@dp.message_handler()
-async def search_order(message: types.Message):
-    phone = message.text
+# ---------- Команда для просмотра заказов ----------
+@dp.message_handler(commands=['all_orders'])
+async def all_orders(message: types.Message):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, status, brand, model, repair_type, repair_price, prepayment, balance_due, parts_cost FROM repairs WHERE client_phone = ? ORDER BY created_at DESC LIMIT 1", (phone,))
-    row = cursor.fetchone()
+    cursor.execute("SELECT id, client_name, model, status FROM repairs ORDER BY created_at DESC")
+    rows = cursor.fetchall()
     conn.close()
 
-    if row:
-        reply = f"📦 Заказ #{row[0]}\nСтатус: {row[1]}\nУстройство: {row[2]} {row[3]}\nРемонт: {row[4]}\nЦена: {row[5]}₽\nЗадаток: {row[6]}₽\nОстаток: {row[7]}₽\nЗапчасти: {row[8]}₽"
-    else:
-        reply = "Заказ не найден."
+    if not rows:
+        await message.answer("Заказов пока нет.")
+        return
 
-    await message.answer(reply)
+    text = "📋 Заказы:\n"
+    for row in rows:
+        text += f"ID: {row[0]}, Клиент: {row[1]}, Модель: {row[2]}, Статус: {row[3]}\n"
 
-if __name__ == '__main__':
+    await message.answer(text)
 
+# ---------- FSM для изменения статуса ----------
+class StatusUpdate(StatesGroup):
+    order_id = State()
+    new_status = State()
+
+@dp.message_handler(commands=['update_status'])
+async def update_status_start(message: types.Message):
+    await message.answer("Введите ID заказа, у которого хотите изменить статус:")
+    await StatusUpdate.order_id.set()
+
+@dp.message_handler(state=StatusUpdate.order_id)
+async def get_order_id(message: types.Message, state: FSMContext):
+    await state.update_data(order_id=int(message.text))
+    await message.answer("Введите новый статус:")
+    await StatusUpdate.next()
+
+@dp.message_handler(state=StatusUpdate.new_status)
+async def get_new_status(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    order_id = data['order_id']
+    new_status = message.text
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE repairs SET status = ? WHERE id = ?", (new_status, order_id))
+    conn.commit()
+    conn.close()
+
+    await message.answer(f"Статус заказа {order_id} обновлён на: {new_status}")
+    await state.finish()
+
+# ---------- Запуск ----------
+if name == 'main':
+    from aiogram import executor
     executor.start_polling(dp, skip_updates=True)
-/update_status
-→ Введите ID заказа:
-→ Введите новый статус (например, "Готово" / "В работе" / "Ожидает запчасть"):
-→ Статус обновлён.
