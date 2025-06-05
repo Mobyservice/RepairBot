@@ -128,4 +128,9 @@ async def search_order(message: types.Message):
     await message.answer(reply)
 
 if __name__ == '__main__':
+
     executor.start_polling(dp, skip_updates=True)
+/update_status
+→ Введите ID заказа:
+→ Введите новый статус (например, "Готово" / "В работе" / "Ожидает запчасть"):
+→ Статус обновлён.
